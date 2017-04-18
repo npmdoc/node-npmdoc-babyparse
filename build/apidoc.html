@@ -138,6 +138,71 @@
 
     </ol></li>
 
+    <li class="apidocModuleLi"><a href="#apidoc.module.babyparse.Parser">module babyparse.Parser</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.babyparse.Parser.Parser">
+            function <span class="apidocSignatureSpan">babyparse.</span>Parser
+            <span class="apidocSignatureSpan">(config)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.babyparse.ParserHandle">module babyparse.ParserHandle</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.babyparse.ParserHandle.ParserHandle">
+            function <span class="apidocSignatureSpan">babyparse.</span>ParserHandle
+            <span class="apidocSignatureSpan">(_config)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.babyparse.parse">module babyparse.parse</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.babyparse.parse.parse">
+            function <span class="apidocSignatureSpan">babyparse.</span>parse
+            <span class="apidocSignatureSpan">(_input, _config)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.babyparse.parseFiles">module babyparse.parseFiles</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.babyparse.parseFiles.parseFiles">
+            function <span class="apidocSignatureSpan">babyparse.</span>parseFiles
+            <span class="apidocSignatureSpan">(_input, _config)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.babyparse.unparse">module babyparse.unparse</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.babyparse.unparse.unparse">
+            function <span class="apidocSignatureSpan">babyparse.</span>unparse
+            <span class="apidocSignatureSpan">(_input, _config)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
 </ol></div>
 
 <div class="apidocSectionDiv">
@@ -742,6 +807,622 @@ rows = parsed.data
 
 
 
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.babyparse.Parser" id="apidoc.module.babyparse.Parser">module babyparse.Parser</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.babyparse.Parser.Parser" id="apidoc.element.babyparse.Parser.Parser">
+        function <span class="apidocSignatureSpan">babyparse.</span>Parser
+        <span class="apidocSignatureSpan">(config)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function Parser(config)
+	{
+		// Unpack the config object
+		config = config || {};
+		var delim = config.delimiter;
+		var newline = config.newline;
+		var comments = config.comments;
+		var step = config.step;
+		var preview = config.preview;
+		var fastMode = config.fastMode;
+
+		// Delimiter must be valid
+		if (typeof delim !== &#x27;string&#x27;
+			|| delim.length != 1
+			|| Baby.BAD_DELIMITERS.indexOf(delim) &#x3e; -1)
+			delim = &#x22;,&#x22;;
+
+		// Comment character must be valid
+		if (comments === delim)
+			throw &#x22;Comment character same as delimiter&#x22;;
+		else if (comments === true)
+			comments = &#x22;#&#x22;;
+		else if (typeof comments !== &#x27;string&#x27;
+			|| Baby.BAD_DELIMITERS.indexOf(comments) &#x3e; -1)
+			comments = false;
+
+		// Newline must be valid: \r, \n, or \r\n
+		if (newline != &#x27;\n&#x27; &#x26;&#x26; newline != &#x27;\r&#x27; &#x26;&#x26; newline != &#x27;\r\n&#x27;)
+			newline = &#x27;\n&#x27;;
+
+		// We&#x27;re gonna need these at the Parser scope
+		var cursor = 0;
+		var aborted = false;
+
+		this.parse = function(input)
+		{
+			// For some reason, in Chrome, this speeds things up (!?)
+			if (typeof input !== &#x27;string&#x27;)
+				throw &#x22;Input must be a string&#x22;;
+
+			// We don&#x27;t need to compute some of these every time parse() is called,
+			// but having them in a more local scope seems to perform better
+			var inputLen = input.length,
+				delimLen = delim.length,
+				newlineLen = newline.length,
+				commentsLen = comments.length;
+			var stepIsFunction = typeof step === &#x27;function&#x27;;
+
+			// Establish starting state
+			cursor = 0;
+			var data = [], errors = [], row = [];
+
+			if (!input)
+				return returnable();
+
+			if (fastMode)
+			{
+				// Fast mode assumes there are no quoted fields in the input
+				var rows = input.split(newline);
+				for (var i = 0; i &#x3c; rows.length; i++)
+				{
+					if (comments &#x26;&#x26; rows[i].substr(0, commentsLen) == comments)
+						continue;
+					if (stepIsFunction)
+					{
+						data = [ rows[i].split(delim) ];
+						doStep();
+						if (aborted)
+							return returnable();
+					}
+					else
+						data.push(rows[i].split(delim));
+					if (preview &#x26;&#x26; i &#x3e;= preview)
+					{
+						data = data.slice(0, preview);
+						return returnable(true);
+					}
+				}
+				return returnable();
+			}
+
+			var nextDelim = input.indexOf(delim, cursor);
+			var nextNewline = input.indexOf(newline, cursor);
+
+			// Parser loop
+			for (;;)
+			{
+				// Field has opening quote
+				if (input[cursor] == &#x27;&#x22;&#x27;)
+				{
+					// Start our search for the closing quote where the cursor is
+					var quoteSearch = cursor;
+
+					// Skip the opening quote
+					cursor++;
+
+					for (;;)
+					{
+						// Find closing quote
+						var quoteSearch = input.indexOf(&#x27;&#x22;&#x27;, quoteSearch+1);
+
+						if (quoteSearch === -1)
+						{
+							// No closing quote... what a pity
+							errors.push({
+								type: &#x22;Quotes&#x22;,
+								code: &#x22;MissingQuotes&#x22;,
+								message: &#x22;Quoted field unterminated&#x22;,
+								row: data.length,	// row has yet to be inserted
+								index: cursor
+							});
+							return finish();
+						}
+
+						if (quoteSearch === inputLen-1)
+						{
+							// Closing quote at EOF
+							row.push(input.substring(cursor, quoteSearch).replace(/&#x22;&#x22;/g, &#x27;&#x22;&#x27;));
+							data.push(row);
+							if (stepIsFunction)
+								doStep();
+							return returnable();
+						}
+
+						// If this quote is escaped, it&#x27;s part of the data; skip it
+						if (input[quoteSearch+1] == &#x27;&#x22;&#x27;)
+						{
+							quoteSearch++;
+							continue;
+						}
+
+						if (input[quoteSearch+1] == delim)
+						{
+							// Closing quote followed by delimiter
+							row.push(input.substring(cursor, quoteSearch).replace(/&#x22;&#x22;/g, &#x27;&#x22;&#x27;));
+							cursor = quoteSearch + 1 + delimLen;
+							nextDelim = input.indexOf(delim, cursor);
+							nextNewline = input.indexOf(newline, cursor);
+							break;
+						}
+
+						if (input.substr(quoteSearch+1, newlineLen) === newline)
+						{
+							// Closing quote followed by newline
+							row.push(input.substring(cursor, quoteSearch).replace(/&#x22;&#x22;/g, &#x27;&#x22;&#x27;));
+							saveRow(quoteSearch + 1 + newlineLen);
+							nextDelim = input.indexOf(delim, cursor);	// because we may have skipped the nextDelim in the quoted field
+
+							if (stepIsFunction)
+							{
+								doStep();
+								if (aborted) ...</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.babyparse.ParserHandle" id="apidoc.module.babyparse.ParserHandle">module babyparse.ParserHandle</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.babyparse.ParserHandle.ParserHandle" id="apidoc.element.babyparse.ParserHandle.ParserHandle">
+        function <span class="apidocSignatureSpan">babyparse.</span>ParserHandle
+        <span class="apidocSignatureSpan">(_config)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function ParserHandle(_config)
+	{
+		// One goal is to minimize the use of regular expressions...
+		var FLOAT = /^\s*-?(\d*\.?\d+|\d+\.?\d*)(e[-+]?\d+)?\s*$/i;
+
+		var self = this;
+		var _stepCounter = 0;	// Number of times step was called (number of rows parsed)
+		var _input;				// The input being parsed
+		var _parser;			// The core parser being used
+		var _paused = false;	// Whether we are paused or not
+		var _delimiterError;	// Temporary state between delimiter detection and processing results
+		var _fields = [];		// Fields are from the header row of the input, if there is one
+		var _results = {		// The last results returned from the parser
+			data: [],
+			errors: [],
+			meta: {}
+		};
+
+		if (isFunction(_config.step))
+		{
+			var userStep = _config.step;
+			_config.step = function(results)
+			{
+				_results = results;
+
+				if (needsHeaderRow())
+					processResults();
+				else	// only call user&#x27;s step function after header row
+				{
+					processResults();
+
+					// It&#x27;s possbile that this line was empty and there&#x27;s no row here after all
+					if (_results.data.length == 0)
+						return;
+
+					_stepCounter += results.data.length;
+					if (_config.preview &#x26;&#x26; _stepCounter &#x3e; _config.preview)
+						_parser.abort();
+					else
+						userStep(_results, self);
+				}
+			};
+		}
+
+		this.parse = function(input)
+		{
+			if (!_config.newline)
+				_config.newline = guessLineEndings(input);
+
+			_delimiterError = false;
+			if (!_config.delimiter)
+			{
+				var delimGuess = guessDelimiter(input);
+				if (delimGuess.successful)
+					_config.delimiter = delimGuess.bestDelimiter;
+				else
+				{
+					_delimiterError = true;	// add error after parsing (otherwise it would be overwritten)
+					_config.delimiter = Baby.DefaultDelimiter;
+				}
+				_results.meta.delimiter = _config.delimiter;
+			}
+
+			var parserConfig = copy(_config);
+			if (_config.preview &#x26;&#x26; _config.header)
+				parserConfig.preview++;	// to compensate for header row
+
+			_input = input;
+			_parser = new Parser(parserConfig);
+			_results = _parser.parse(_input);
+			processResults();
+			if (isFunction(_config.complete) &#x26;&#x26; !_paused &#x26;&#x26; (!self.streamer || self.streamer.finished()))
+				_config.complete(_results);
+			return _paused ? { meta: { paused: true } } : (_results || { meta: { paused: false } });
+		};
+
+		this.pause = function()
+		{
+			_paused = true;
+			_parser.abort();
+			_input = _input.substr(_parser.getCharIndex());
+		};
+
+		this.resume = function()
+		{
+			_paused = false;
+			_parser = new Parser(_config);
+			_parser.parse(_input);
+			if (!_paused)
+			{
+				if (self.streamer &#x26;&#x26; !self.streamer.finished())
+					self.streamer.resume();		// more of the file yet to come
+				else if (isFunction(_config.complete))
+					_config.complete(_results);
+			}
+		};
+
+		this.abort = function()
+		{
+			_parser.abort();
+			if (isFunction(_config.complete))
+				_config.complete(_results);
+			_input = &#x22;&#x22;;
+		};
+
+		function processResults()
+		{
+			if (_results &#x26;&#x26; _delimiterError)
+			{
+				addError(&#x22;Delimiter&#x22;, &#x22;UndetectableDelimiter&#x22;, &#x22;Unable to auto-detect delimiting character; defaulted to &#x27;&#x22;+Baby.DefaultDelimiter
++&#x22;&#x27;&#x22;);
+				_delimiterError = false;
+			}
+
+			if (_config.skipEmptyLines)
+			{
+				for (var i = 0; i &#x3c; _results.data.length; i++)
+					if (_results.data[i].length == 1 &#x26;&#x26; _results.data[i][0] == &#x22;&#x22;)
+						_results.data.splice(i--, 1);
+			}
+
+			if (needsHeaderRow())
+				fillHeaderFields();
+
+			return applyHeaderAndDynamicTyping();
+		}
+
+		function needsHeaderRow()
+		{
+			return _config.header &#x26;&#x26; _fields.length == 0;
+		}
+
+		function fillHeaderFields()
+		{
+			if (!_results)
+				return;
+			for (var i = 0; needsHeaderRow() &#x26;&#x26; i &#x3c; _results.data.length; i++)
+				for (var j = 0; j &#x3c; _results.data[i].length; j++)
+					_fields.push(_results.data[i][j]);
+			_results.data.splice(0, 1);
+		}
+
+		function applyHeaderAndDynamicTyping()
+		{
+			if (!_results || (!_config.header &#x26;&#x26; !_config.dynamicTyping))
+				return _results;
+
+			for (var i = 0; i &#x3c; _results.data.length; i++)
+			{
+				var row = {};
+
+				for (var j = 0; j &#x3c; _results.data[i].length; j++)
+				{
+					if (_config.dynamicTyping)
+					{
+						var value = _r ...</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.babyparse.parse" id="apidoc.module.babyparse.parse">module babyparse.parse</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.babyparse.parse.parse" id="apidoc.element.babyparse.parse.parse">
+        function <span class="apidocSignatureSpan">babyparse.</span>parse
+        <span class="apidocSignatureSpan">(_input, _config)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function CsvToJson(_input, _config)
+	{
+		var config = copyAndValidateConfig(_config);
+		var ph = new ParserHandle(config);
+		var results = ph.parse(_input);
+		return results;
+	}</pre></li>
+    <li>example usage<pre class="apidocCodePre">...
+```
+
+Basic Usage
+-----
+
+```js
+// pass in the contents of a csv file
+parsed = Baby.<span class="apidocCodeKeywordSpan">parse</span>(csv);
+
+// voila
+rows = parsed.data;
+```
+
+
+Parse File(s)
+...</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.babyparse.parseFiles" id="apidoc.module.babyparse.parseFiles">module babyparse.parseFiles</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.babyparse.parseFiles.parseFiles" id="apidoc.element.babyparse.parseFiles.parseFiles">
+        function <span class="apidocSignatureSpan">babyparse.</span>parseFiles
+        <span class="apidocSignatureSpan">(_input, _config)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function ParseFiles(_input, _config)
+	{
+		if (Array.isArray(_input)) {
+			var results = [];
+			_input.forEach(function(input) {
+				if(typeof input === &#x27;object&#x27;)
+					results.push(ParseFiles(input.file, input.config));
+				else
+					results.push(ParseFiles(input, _config));
+			});
+			return results;
+		} else {
+			var results = {
+				data: [],
+				errors: []
+			};
+			if ((/(\.csv|\.txt)$/).test(_input)) {
+				try {
+					var contents = fs.readFileSync(_input).toString();
+					return CsvToJson(contents, _config);
+				} catch (err) {
+					results.errors.push(err);
+					return results;
+				}
+			} else {
+				results.errors.push({
+					type: &#x27;&#x27;,
+					code: &#x27;&#x27;,
+					message: &#x27;Unsupported file type.&#x27;,
+					row: &#x27;&#x27;
+				});
+				return results;
+			}
+		}
+	}</pre></li>
+    <li>example usage<pre class="apidocCodePre">...
+Parse File(s)
+-----
+
+Baby Parse will assume the input is a filename if it ends in .csv or .txt.
+
+```js
+// Parse single file
+parsed = Baby.<span class="apidocCodeKeywordSpan">parseFiles</span>(file[, config])
+
+rows = parsed.data
+```
+
+```js
+// Parse multiple files
+// Files can be either an array of strings or objects { file: filename[, config: config] }
+...</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.babyparse.unparse" id="apidoc.module.babyparse.unparse">module babyparse.unparse</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.babyparse.unparse.unparse" id="apidoc.element.babyparse.unparse.unparse">
+        function <span class="apidocSignatureSpan">babyparse.</span>unparse
+        <span class="apidocSignatureSpan">(_input, _config)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function JsonToCsv(_input, _config)
+	{
+		var _output = &#x22;&#x22;;
+		var _fields = [];
+
+		// Default configuration
+		var _quotes = false;	// whether to surround every datum with quotes
+		var _delimiter = &#x22;,&#x22;;	// delimiting character
+		var _newline = &#x22;\r\n&#x22;;	// newline character(s)
+
+		unpackConfig();
+
+		if (typeof _input === &#x27;string&#x27;)
+			_input = JSON.parse(_input);
+
+		if (_input instanceof Array)
+		{
+			if (!_input.length || _input[0] instanceof Array)
+				return serialize(null, _input);
+			else if (typeof _input[0] === &#x27;object&#x27;)
+				return serialize(objectKeys(_input[0]), _input);
+		}
+		else if (typeof _input === &#x27;object&#x27;)
+		{
+			if (typeof _input.data === &#x27;string&#x27;)
+				_input.data = JSON.parse(_input.data);
+
+			if (_input.data instanceof Array)
+			{
+				if (!_input.fields)
+					_input.fields = _input.data[0] instanceof Array
+									? _input.fields
+									: objectKeys(_input.data[0]);
+
+				if (!(_input.data[0] instanceof Array) &#x26;&#x26; typeof _input.data[0] !== &#x27;object&#x27;)
+					_input.data = [_input.data];	// handles input like [1,2,3] or [&#x22;asdf&#x22;]
+			}
+
+			return serialize(_input.fields || [], _input.data || []);
+		}
+
+		// Default (any valid paths should return before this)
+		throw &#x22;exception: Unable to serialize unrecognized input&#x22;;
+
+
+		function unpackConfig()
+		{
+			if (typeof _config !== &#x27;object&#x27;)
+				return;
+
+			if (typeof _config.delimiter === &#x27;string&#x27;
+				&#x26;&#x26; _config.delimiter.length == 1
+				&#x26;&#x26; Baby.BAD_DELIMITERS.indexOf(_config.delimiter) == -1)
+			{
+				_delimiter = _config.delimiter;
+			}
+
+			if (typeof _config.quotes === &#x27;boolean&#x27;
+				|| _config.quotes instanceof Array)
+				_quotes = _config.quotes;
+
+			if (typeof _config.newline === &#x27;string&#x27;)
+				_newline = _config.newline;
+		}
+
+
+		// Turns an object&#x27;s keys into an array
+		function objectKeys(obj)
+		{
+			if (typeof obj !== &#x27;object&#x27;)
+				return [];
+			var keys = [];
+			for (var key in obj)
+				keys.push(key);
+			return keys;
+		}
+
+		// The double for loop that iterates the data and writes out a CSV string including header row
+		function serialize(fields, data)
+		{
+			var csv = &#x22;&#x22;;
+
+			if (typeof fields === &#x27;string&#x27;)
+				fields = JSON.parse(fields);
+			if (typeof data === &#x27;string&#x27;)
+				data = JSON.parse(data);
+
+			var hasHeader = fields instanceof Array &#x26;&#x26; fields.length &#x3e; 0;
+			var dataKeyedByField = !(data[0] instanceof Array);
+
+			// If there a header row, write it first
+			if (hasHeader)
+			{
+				for (var i = 0; i &#x3c; fields.length; i++)
+				{
+					if (i &#x3e; 0)
+						csv += _delimiter;
+					csv += safe(fields[i], i);
+				}
+				if (data.length &#x3e; 0)
+					csv += _newline;
+			}
+
+			// Then write out the data
+			for (var row = 0; row &#x3c; data.length; row++)
+			{
+				var maxCol = hasHeader ? fields.length : data[row].length;
+
+				for (var col = 0; col &#x3c; maxCol; col++)
+				{
+					if (col &#x3e; 0)
+						csv += _delimiter;
+					var colIdx = hasHeader &#x26;&#x26; dataKeyedByField ? fields[col] : col;
+					csv += safe(data[row][colIdx], col);
+				}
+
+				if (row &#x3c; data.length - 1)
+					csv += _newline;
+			}
+
+			return csv;
+		}
+
+		// Encloses a value around quotes if needed (makes a value safe for CSV insertion)
+		function safe(str, col)
+		{
+			if (typeof str === &#x22;undefined&#x22; || str === null)
+				return &#x22;&#x22;;
+
+			str = str.toString().replace(/&#x22;/g, &#x27;&#x22;&#x22;&#x27;);
+
+			var needsQuotes = (typeof _quotes === &#x27;boolean&#x27; &#x26;&#x26; _quotes)
+							|| (_quotes instanceof Array &#x26;&#x26; _quotes[col])
+							|| hasAny(str, Baby.BAD_DELIMITERS)
+							|| str.indexOf(_delimiter) &#x3e; -1
+							|| str.charAt(0) == &#x27; &#x27;
+							|| str.charAt(str.length - 1) == &#x27; &#x27;;
+
+			return needsQuotes ? &#x27;&#x22;&#x27; + str + &#x27;&#x22;&#x27; : str;
+		}
+
+		function hasAny(str, substrings)
+		{
+			for (var i = 0; i &#x3c; substrings.length; i++)
+				if (str.indexOf(substrings[i]) &#x3e; -1)
+					return true;
+			return false;
+		}
+	}</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
 
 
 </div>
