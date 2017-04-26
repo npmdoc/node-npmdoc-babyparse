@@ -1,6 +1,6 @@
 # npmdoc-babyparse
 
-#### api documentation for  [babyparse (v0.4.6)](https://github.com/Rich-Harris/BabyParse#readme)  [![npm package](https://img.shields.io/npm/v/npmdoc-babyparse.svg?style=flat-square)](https://www.npmjs.org/package/npmdoc-babyparse) [![travis-ci.org build-status](https://api.travis-ci.org/npmdoc/node-npmdoc-babyparse.svg)](https://travis-ci.org/npmdoc/node-npmdoc-babyparse)
+#### basic api documentation for  [babyparse (v0.4.6)](https://github.com/Rich-Harris/BabyParse#readme)  [![npm package](https://img.shields.io/npm/v/npmdoc-babyparse.svg?style=flat-square)](https://www.npmjs.org/package/npmdoc-babyparse) [![travis-ci.org build-status](https://api.travis-ci.org/npmdoc/node-npmdoc-babyparse.svg)](https://travis-ci.org/npmdoc/node-npmdoc-babyparse)
 
 #### Fast and reliable CSV parser based on PapaParse
 
@@ -74,7 +74,8 @@
     },
     "scripts": {},
     "title": "BabyParse",
-    "version": "0.4.6"
+    "version": "0.4.6",
+    "bin": {}
 }
 ```
 
